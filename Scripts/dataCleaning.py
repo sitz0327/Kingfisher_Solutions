@@ -2,25 +2,15 @@ import os
 import pandas as pd
 import glob
 
-
-
-def ConcatFiles(input_path, output_path):
-    print(input_path)
-    if os.path.exists(output_path):
-        os.remove(output_path)
+def FixDateTime(input_path):
     files = glob.glob(os.path.join(input_path, "*.csv"))
-
+    print(files[0])
     df = pd.read_csv(files[0])
-    
-    i = 0
-    for f in files[1:]:
-        temp = pd.read_csv(f,skiprows=2)
-        df = pd.concat([df,temp], ignore_index=True)
-        df.to_csv(os.path.join(output_path), index=False)
 
-    df.to_csv(output_path, index=False)
-    return
-
+    df[['Year','Month','Day','Hour']] = df[['Year','Month','Day','Hour']].astype(int)
+    df['datetime'] = pd.to_datetime(df[['Year', 'Month','Day', 'Hour']]) 
+    df.drop(columns=['Year', 'Month', 'Day', 'Hour', 'Minute'],inplace=True) 
+    df.to_csv(files[0], index=False)
 
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -32,4 +22,4 @@ if __name__ == "__main__":
     for dir in os.listdir(parent_dir):
         dir_path = os.path.join(parent_dir, dir) 
         output_path = os.path.join(dir_path, f"{dir}_combined.csv")
-        ConcatFiles(dir_path, output_path)
+        FixDateTime(dir_path)
