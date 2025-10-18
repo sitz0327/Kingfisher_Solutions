@@ -6,7 +6,7 @@ import numpy as np
 
 # === CONFIGURATION ===
 # Define the path to the merged file
-FILE_PATH = Path(r"C:\Users\seani\Documents\anaconda_projects\Kingfisher_Solutions\Data\Solar Outut By Site + Weather data combined\Bearspaw Water Treatment Plant\Bearspaw Water Treatment Plant_merged_solar_weather.csv")
+Path(r"\Kingfisher_Solutions\Data\split_sites")
 
 # Identify key columns based on standard weather data structure
 SOLAR_OUTPUT_COL = 'kWh'
@@ -121,7 +121,7 @@ def analyze_solar_data(file_path: Path):
         )
         
         plt.title(f'Relationship: Solar Output (kWh) vs. {TEMPERATURE_COL} (Colored by Cloud Type)', fontsize=16)
-        plt.xlabel(f"{TEMPERATURE_COL} ($^{\circ}$C)", fontsize=12)
+        plt.xlabel(f"{TEMPERATURE_COL}", fontsize=12)
         plt.ylabel("Power Generated (kWh)", fontsize=12)
         plt.legend(title='Cloud Type', bbox_to_anchor=(1.05, 1), loc='upper left')
         plt.tight_layout()
@@ -134,4 +134,6 @@ def analyze_solar_data(file_path: Path):
 
 # Run the analysis
 if __name__ == "__main__":
-    analyze_solar_data(FILE_PATH)
+    solar_path = Path(r"\Kingfisher_Solutions\Data\split_sites")
+    weather_path = Path(r"\Kingfisher_Solutions\Data\NSRDB")
+    analyze_solar_data(solar_path, weather_path)
