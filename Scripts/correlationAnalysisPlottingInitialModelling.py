@@ -6,6 +6,7 @@ Created on Wed Oct 15 15:50:04 2025
 """
 
 import pandas as pd
+import os
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
@@ -16,23 +17,26 @@ from sklearn.metrics import mean_squared_error, r2_score
 
 # === CONFIGURATION ===
 # Define the path to the merged file
-FILE_PATH = Path(r"C:\Users\seani\Documents\anaconda_projects\Kingfisher_Solutions\Data\Solar Outut By Site + Weather data combined\Bearspaw Water Treatment Plant\Bearspaw Water Treatment Plant_merged_solar_weather.csv")
+#FILE_PATH = Path(r"\Kingfisher_Solutions\Data\DBCleaned.csv")
+script_dir = os.path.dirname(os.path.abspath(__file__))
+parent = os.path.dirname(script_dir)
+FILE_PATH = os.path.join(parent, "Data", "DBCleaned.csv")
 
 # Identify key columns based on standard weather data structure
-SOLAR_OUTPUT_COL = 'kWh'
+SOLAR_OUTPUT_COL = 'kWh Normalised'
 IRRADIANCE_COL = 'Clearsky GHI' # Assuming 'Clearsky GHI' is the Global Horizontal Irradiance column
 TEMPERATURE_COL = 'Temperature' # Assuming 'Temperature' is the ambient temperature column
 # New column assumption based on correlation output:
 PRIMARY_FEATURE = 'GHI' 
 
-def build_prediction_model(df_active: pd.DataFrame, target_col: str, feature_cols: list):
+def build_prediction_model(df: pd.DataFrame, target_col: str, feature_cols: list):
     """
     Builds and evaluates a simple Linear Regression model for solar prediction.
     """
     print("\n--- Machine Learning: Linear Regression Model ---")
 
     # Drop any rows with NaN in the selected features/target before training
-    model_df = df_active[[target_col] + feature_cols].dropna()
+    model_df = df[[target_col] + feature_cols].dropna()
     
     if model_df.empty:
         print("Model skipped: Insufficient data after dropping NaNs in features.")
@@ -75,161 +79,143 @@ def analyze_solar_data(file_path: Path):
     """
     Loads the merged data, performs correlation analysis, and generates key visualizations.
     """
-    print(f"Loading data from: {file_path.name}")
+    print(f"Loading data from: {os.path.basename(FILE_PATH)}")
     
-    try:
-        # Load data and ensure 'datetime' is the index for time-series plotting
-        df = pd.read_csv(file_path)
-        df.columns = df.columns.str.strip()
-        
-        # Clean datetime column (assuming it's already structured correctly from the merge script)
-        df['datetime'] = pd.to_datetime(df['datetime'], errors='coerce')
-        df = df.dropna(subset=['datetime', SOLAR_OUTPUT_COL]).set_index('datetime')
-        
-        # 1. DATA CLEANING AND PREP
-        
-        # FIX: Explicitly convert the solar output column to numeric.
-        # This resolves the 'str and int comparison' error.
-        df[SOLAR_OUTPUT_COL] = pd.to_numeric(df[SOLAR_OUTPUT_COL], errors='coerce').fillna(0)
-        
-        # Filter for actual generation periods to remove night/inactive periods (where kWh == 0)
-        # This focuses the analysis on operational hours.
-        df_active = df[df[SOLAR_OUTPUT_COL] > 0].copy()
-        
-        print(f"Total records loaded: {len(df)}. Active generation records: {len(df_active)}")
-        
-        if df_active.empty:
-            print("Error: No active solar generation records found after filtering.")
-            return
+    # Load data and ensure 'datetime' is the index for time-series plotting
+    df = pd.read_csv(file_path, low_memory=False)
+    print(df.describe())
 
-        # 2. CORRELATION ANALYSIS (RE-CALCULATED FOR ML FEATURE SELECTION)
-        print("\n--- Correlation Analysis: Top Factors affecting kWh ---")
-        
-        # Select numeric columns for correlation calculation
-        numeric_df = df_active.select_dtypes(include=np.number)
-        
-        # Calculate correlation with Solar Output (kWh)
-        correlations = numeric_df.corr()[SOLAR_OUTPUT_COL].sort_values(ascending=False)
-        
-        # Exclude self-correlation (kWh vs kWh)
-        top_correlations = correlations[correlations.index != SOLAR_OUTPUT_COL]
-        
-        # Show top 5 strongest (absolute value) correlations
-        top_5_correlations = top_correlations.abs().sort_values(ascending=False).head(5)
-        
-        print("Top 5 Variables Highly Correlated with Solar Output (kWh):")
-        # Print the corresponding signed correlation values
-        feature_list = []
-        for col in top_5_correlations.index:
-             print(f"  {col.ljust(20)}: {correlations[col]:.4f}")
-             feature_list.append(col)
+    df = df[df['kWh'] < 600]
 
-        # 3. VISUALIZATIONS
-        
-        sns.set_style("whitegrid")
-        
-        # --- Visual 1: Time Series of Solar Output (kWh) ---
-        plt.figure(figsize=(18, 6))
-        # Plotting the raw data points as requested by user's example (style='.')
-        df_active[SOLAR_OUTPUT_COL].plot(
-            style='.', 
-            color='#F8766D', 
-            alpha=0.6, 
-            label='Actual Power (kWh)'
-        )
-        # Add a smoothed line for trend visibility
-        df_active[SOLAR_OUTPUT_COL].resample('D').mean().plot(
-            color='#1f77b4', 
-            linewidth=2, 
-            label='Daily Average Trend'
-        )
-        
-        plt.title('Time Series: Solar Power Generated (kWh) - ' + file_path.parent.name, fontsize=16)
-        plt.xlabel("Date", fontsize=12)
-        plt.ylabel("Power Generated (kWh)", fontsize=12)
-        plt.legend()
-        plt.ylim(bottom=0)
-        plt.tight_layout()
-        plt.show()
-        
-        
-        # --- Visual 2: Scatter Plot: kWh vs. Primary Driver (Irradiance) ---
-        plt.figure(figsize=(10, 8))
-        # Use jointplot for a scatter plot with marginal histograms for distribution
-        sns.jointplot(
-            x=PRIMARY_FEATURE, # Using GHI as the highest correlated factor
-            y=SOLAR_OUTPUT_COL, 
-            data=df_active, 
-            kind='scatter', 
-            color='#00BA38', 
-            alpha=0.7
-        )
-        plt.suptitle(f'Relationship: Solar Output (kWh) vs. {PRIMARY_FEATURE}', y=1.02, fontsize=16)
-        plt.xlabel(f"{PRIMARY_FEATURE}", fontsize=12)
-        plt.ylabel("Power Generated (kWh)", fontsize=12)
-        plt.tight_layout(rect=[0, 0, 1, 0.98])
-        plt.show()
+    print(df.describe())
+    df.columns = df.columns.str.strip()
+    
+    # Clean datetime column (assuming it's already structured correctly from the merge script)
+    df['datetime'] = pd.to_datetime(df['datetime'], errors='coerce')
+    df = df.dropna(subset=['datetime', SOLAR_OUTPUT_COL]).set_index('datetime')
+
+    # 2. CORRELATION ANALYSIS (RE-CALCULATED FOR ML FEATURE SELECTION)
+    print("\n--- Correlation Analysis: Top Factors affecting kWh ---")
+    
+    # Select numeric columns for correlation calculation
+    numeric_df = df.select_dtypes(include=np.number)
+
+    #drop unnecessary columns:
+    filtered_df = numeric_df.drop(columns=['kWh', 'maximumPower'])
+    
+    # Calculate correlation with Solar Output (kWh)
+    correlations = filtered_df.corr()[SOLAR_OUTPUT_COL].sort_values(ascending=False)
+    
+    # Exclude self-correlation (kWh vs kWh)
+    top_correlations = correlations[correlations.index != SOLAR_OUTPUT_COL]
+    
+    # Show top 5 strongest (absolute value) correlations
+    top_5_correlations = top_correlations.abs().sort_values(ascending=False).head(5)
+    
+    print("Top 5 Variables Highly Correlated with Solar Output (kWh):")
+    # Print the corresponding signed correlation values
+    feature_list = []
+    for col in top_5_correlations.index:
+            print(f"  {col.ljust(20)}: {correlations[col]:.4f}")
+            feature_list.append(col)
+
+    # 3. VISUALIZATIONS
+    
+    sns.set_style("whitegrid")
+    
+    # --- Visual 1: Time Series of Solar Output (kWh) ---
+    plt.figure(figsize=(18, 6))
+    # Plotting the raw data points as requested by user's example (style='.')
+    df[SOLAR_OUTPUT_COL].plot(
+        style='.', 
+        color='#F8766D', 
+        alpha=0.6, 
+        label='Actual Power (kWh)'
+    )
+    # Add a smoothed line for trend visibility
+    df[SOLAR_OUTPUT_COL].resample('D').mean().plot(
+        color='#1f77b4', 
+        linewidth=2, 
+        label='Daily Average Trend'
+    )
+    
+    plt.title('Time Series: Solar Power Generated (kWh)', fontsize=16)
+    plt.xlabel("Date", fontsize=12)
+    plt.ylabel("Power Generated (kWh)", fontsize=12)
+    plt.legend()
+    plt.ylim(bottom=0)
+    plt.tight_layout()
+    plt.show()
+    
+    
+    # --- Visual 2: Scatter Plot: kWh vs. Primary Driver (Irradiance) ---
+    plt.figure(figsize=(10, 8))
+    df.info()
+    # Use jointplot for a scatter plot with marginal histograms for distribution
+    sns.jointplot(
+        x=PRIMARY_FEATURE, # Using GHI as the highest correlated factor
+        y=SOLAR_OUTPUT_COL, 
+        data=df, 
+        kind='scatter', 
+        hue='year', 
+        alpha=0.7
+    )
+    plt.suptitle(f'Relationship: Solar Output (kWh) vs. {PRIMARY_FEATURE}', y=1.02, fontsize=16)
+    plt.xlabel(f"{PRIMARY_FEATURE}", fontsize=12)
+    plt.ylabel("Power Generated (kWh)", fontsize=12)
+    plt.tight_layout(rect=[0, 0, 1, 0.98])
+    plt.show()
 
 
-        # --- Visual 3: Scatter Plot: kWh vs. Secondary Factor (Temperature) ---
-        plt.figure(figsize=(10, 8))
-        sns.scatterplot(
-            x=TEMPERATURE_COL, 
-            y=SOLAR_OUTPUT_COL, 
-            data=df_active, 
-            hue='Cloud Type', # Optional: use another variable for color insight
-            palette='viridis', 
-            size=SOLAR_OUTPUT_COL, # Size markers by output volume
-            alpha=0.6
-        )
-        
-        plt.title(f'Relationship: Solar Output (kWh) vs. {TEMPERATURE_COL} (Colored by Cloud Type)', fontsize=16)
-        
-        # FIXED: Changed '$^{\circ}$C' to '\u00b0C' (Unicode degree symbol)
-        plt.xlabel(f"{TEMPERATURE_COL} (\u00b0C)", fontsize=12) 
-        
-        plt.ylabel("Power Generated (kWh)", fontsize=12)
-        plt.legend(title='Cloud Type', bbox_to_anchor=(1.05, 1), loc='upper left')
-        plt.tight_layout()
-        plt.show()
+    # --- Visual 3: Scatter Plot: kWh vs. Secondary Factor (Temperature) ---
+    plt.figure(figsize=(10, 8))
+    sns.scatterplot(
+        x=TEMPERATURE_COL, 
+        y=SOLAR_OUTPUT_COL, 
+        data=df, 
+        hue='Cloud Type', # Optional: use another variable for color insight
+        palette='viridis', 
+        size=SOLAR_OUTPUT_COL, # Size markers by output volume
+        alpha=0.6
+    )
+    
+    plt.title(f'Relationship: Solar Output (kWh) vs. {TEMPERATURE_COL} (Colored by Cloud Type)', fontsize=16)
+    
+    # FIXED: Changed '$^{\circ}$C' to '\u00b0C' (Unicode degree symbol)
+    plt.xlabel(f"{TEMPERATURE_COL} (\u00b0C)", fontsize=12) 
+    
+    plt.ylabel("Power Generated (kWh)", fontsize=12)
+    plt.legend(title='Cloud Type', bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.tight_layout()
+    plt.show()
 
-        # --- Visual 4: Monthly Performance Box Plot (New Visual) ---
-        df_active['Month'] = df_active.index.month
-        plt.figure(figsize=(12, 6))
-        sns.boxplot(
-            x='Month', 
-            y=SOLAR_OUTPUT_COL, 
-            data=df_active, 
-            palette='coolwarm',
-            fliersize=3,
-        )
-        plt.title('Monthly Power Output Distribution (Seasonality)', fontsize=16)
-        plt.xlabel("Month of Year", fontsize=12)
-        plt.ylabel("Power Generated (kWh)", fontsize=12)
-        plt.xticks(ticks=range(12), labels=['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'])
-        plt.show()
+    # --- Visual 4: Monthly Performance Box Plot (New Visual) ---
+    df['Month'] = df.index.month
+    plt.figure(figsize=(12, 6))
+    sns.boxplot(
+        x='Month', 
+        y=SOLAR_OUTPUT_COL, 
+        data=df, 
+        palette='coolwarm',
+        fliersize=3,
+    )
+    plt.title('Monthly Power Output Distribution (Seasonality)', fontsize=16)
+    plt.xlabel("Month of Year", fontsize=12)
+    plt.ylabel("Power Generated (kWh)", fontsize=12)
+    plt.xticks(ticks=range(12), labels=['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'])
+    plt.show()
 
-        # --- Visual 5: Autocorrelation Plot (New Visual) ---
-        # The first difference helps remove the trend for clearer autocorrelation
-        pd.plotting.autocorrelation_plot(df_active[SOLAR_OUTPUT_COL].resample('H').mean().dropna(), ax=plt.figure(figsize=(12, 5)).gca(), color='#619CFF')
-        plt.title('Autocorrelation of Hourly Solar Output', fontsize=16)
-        plt.show()
+    # --- Visual 5: Autocorrelation Plot (New Visual) ---
+    # The first difference helps remove the trend for clearer autocorrelation
+    pd.plotting.autocorrelation_plot(df[SOLAR_OUTPUT_COL].resample('H').mean().dropna(), ax=plt.figure(figsize=(12, 5)).gca(), color='#619CFF')
+    plt.title('Autocorrelation of Hourly Solar Output', fontsize=16)
+    plt.show()
 
-        # 4. RUN MACHINE LEARNING MODEL
-        # We'll use the top 4 non-self-correlated numeric features for the model
-        ml_features = [col for col in feature_list if col != SOLAR_OUTPUT_COL][:4]
-        build_prediction_model(df_active, SOLAR_OUTPUT_COL, ml_features)
-        
-    except FileNotFoundError:
-        print(f"Error: File not found at the specified path: {file_path}")
-    except Exception as e:
-        print(f"An unexpected error occurred during processing: {e}")
+    # 4. RUN MACHINE LEARNING MODEL
+    # We'll use the top 4 non-self-correlated numeric features for the model
+    ml_features = [col for col in feature_list if col != SOLAR_OUTPUT_COL][:4]
+    build_prediction_model(df, SOLAR_OUTPUT_COL, ml_features)
 
 # Run the analysis
 if __name__ == "__main__":
-    # Ensure sklearn is available for ML
-    try:
-        analyze_solar_data(FILE_PATH)
-    except ImportError:
-        print("\nError: Scikit-learn (sklearn) is required for the machine learning section.")
-        print("Please install it using: pip install scikit-learn")
+    analyze_solar_data(FILE_PATH)

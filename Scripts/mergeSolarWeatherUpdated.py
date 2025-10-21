@@ -8,6 +8,7 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 parent = os.path.dirname(script_dir)
 weather_path = os.path.join(parent, "Data", "NSRDB")
 solar_path = os.path.join(parent, "Data", "SplitSites")
+installation_path = os.path.join(parent, "Data", "Solar_Photovoltaic_Sites_20250925.csv")
 output_path = os.path.join(parent, "Data", "MergedSiteData")
 
 #solar_path = Path(r"\Kingfisher_Solutions\Data\SplitSites")
@@ -35,6 +36,11 @@ for site in all_sites:
     weather = pd.read_csv(site_weather_path)
     weather.columns = weather.columns.str.strip()
 
+    # === Load Installation data ===
+    installations = pd.read_csv(installation_path)
+    installations = installations[['id', 'maximumPower']]
+
+
     # Combine date columns into a single datetime
     weather['datetime'] = pd.to_datetime(weather[['Year', 'Month', 'Day', 'Hour', 'Minute']], errors='coerce')
     weather = weather.dropna(subset=['datetime'])
@@ -47,15 +53,22 @@ for site in all_sites:
 
     # === MERGE DATASETS ===
     # We'll use "merge_asof" to attach the nearest *next* weather reading to each solar measurement
-    merged = pd.merge_asof(
-        solar.sort_values('datetime'),
-        weather.sort_values('datetime'),
+    merged = pd.merge(
+        solar,
+        weather,
         on='datetime',
-        direction='forward'  # gives the next available weather reading (rounded up)
+        how = 'left'
+    )
+
+    merged = pd.merge(
+        merged,
+        installations,
+        on='id',
+        how = 'left'
     )
 
     # === SAVE OUTPUT ===
-    merged.to_csv(site_output_path, index=False)
+    merged.to_csv(site_output_path, index=True)
 
 print(f"✅ Merged data saved to:\n{output_path}")
 print(f"Total merged rows: {len(merged)}")
