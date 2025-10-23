@@ -61,3 +61,6 @@ plt.xlabel("Features")
 plt.ylabel("Principal Components")
 plt.tight_layout()
 plt.show()
+
+
+

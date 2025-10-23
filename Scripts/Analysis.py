@@ -2,17 +2,24 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
+import itertools
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import r2_score, mean_absolute_error
+from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout
 from tensorflow.keras.optimizers import Adam
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score, mean_absolute_error
+from lightgbm import LGBMRegressor
+
+from sktime.forecasting.compose import make_reduction
+from sktime.forecasting.model_selection import temporal_train_test_split
+from sktime.forecasting.arima import AutoARIMA
+from sktime.forecasting.ets import AutoETS
+
 
 DB_FILEPATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Data", "DBcleaned.csv")
 OUTPUT = 'kWh Normalised'
@@ -21,7 +28,7 @@ OUTPUT = 'kWh Normalised'
 # Load data
 df = pd.read_csv(DB_FILEPATH)
 
-df = df.drop(columns=['name','id','kWh','datetime','maximumPower','month','day','hour','dayOfYear', 'year', 'Cloud Fill Flag', 'Cloud Type', 'Fill Flag'])
+df = df.drop(columns=['id','kWh','datetime','maximumPower','month','day','hour','dayOfYear', 'year', 'Cloud Fill Flag', 'Cloud Type', 'Fill Flag'])
 
 # Select numeric features only
 X = df.select_dtypes(include=['float64', 'int64']).drop(columns=[OUTPUT])
@@ -115,3 +122,37 @@ plt.show()
 y_pred = model.predict(X_test).flatten()
 print("R²:", r2_score(y_test, y_pred))
 print("MAE:", mean_absolute_error(y_test, y_pred))
+
+
+
+
+
+# modelling Params
+model_name = 'Lin_Reg'
+reg_model = regression_models[model_name]()
+
+## Hyperparameter Ranges
+lookback_windows = [12,24,52,105]
+forecasting_approaches = ['direct', 'recursive', 'dirrec']
+
+hyperparams_grid = [lookback_windows] + [forecasting_approaches]
+hyperparams_grid = list(itertools.product(*hyperparams_grid))
+
+hyperparameter_result = val_opt.to_frame().rename(columns={'kWh':'y_true'}).copy()
+
+print(f"Evaluating {len(hyperparams_grid)} hyperparameter combinations")
+
+for params in hyperparams_grid:
+    lookback_window, approach = params
+    
+    forecaster = make_reduction(reg_model, window_length=lookback_window, strategy=approach)
+    fit_kwargs = {} if approach == 'recursive' else {'fh':fh}
+        
+    # Fit and predict
+    forecaster.fit(train_opt, **fit_kwargs)        
+    prediction = forecaster.predict(fh=fh)
+    
+    hyperparameter_result[approach + "_" + model_name + "_Window_" + str(lookback_window)] = prediction    
+    
+hyperparameter_metrics =  get_evaluation_results(hyperparameter_result)
+hyperparameter_metrics.sort_values('Score').groupby('Metric').head(1)
