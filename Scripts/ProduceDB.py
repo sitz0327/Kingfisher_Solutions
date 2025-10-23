@@ -132,7 +132,6 @@ def clean_db(df):
     encoder = OneHotEncoder(sparse_output=False, max_categories=15)
     encoded = encoder.fit_transform(df[['Cloud Type']])
     encoded_df = pd.DataFrame(encoded, columns=encoder.get_feature_names_out(['Cloud Type']))
-    print(encoded_df)
 
     df = pd.concat([df, encoded_df], axis = 1, ignore_index=False)
 
