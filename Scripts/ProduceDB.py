@@ -7,7 +7,7 @@ import numpy as np
 ROOT = script_dir = Path(__file__).resolve().parent.parent
 
 
-def split_solar_data_by_site():
+def split_solar_output_data_by_site():
     """
     Splits solar data from a single CSV into multiple CSVs,
     one for each unique site found in the 'name' column.
@@ -39,7 +39,7 @@ def split_solar_data_by_site():
     print(f"\n--- Done! Processed {processed_count} site files in '{output_directory}'.")
 
 
-def merge_solar_sutput_and_weather():
+def merge_solar_output_and_weather():
     weather_path = ROOT / "Data" /"NSRDB"
     solar_path = ROOT / "Data" / "SplitSites"
     installation_path = ROOT / "Data" / "Solar_Photovoltaic_Sites_20250925.csv"
@@ -57,9 +57,12 @@ def merge_solar_sutput_and_weather():
 
         # === LOAD SOLAR DATA ===
         solar = pd.read_csv(site_solar_path)
-        solar.columns = solar.columns.str.strip()
         solar['datetime'] = pd.to_datetime(solar['date'], format='%d/%m/%Y %H:%M', errors='coerce')
-        solar = solar.dropna(subset=['datetime'])
+        solar.set_index('datetime', inplace=True)
+        full_date_range = pd.date_range(start=df.index.min(), end=df.index.max(), freq='h')
+        solar = df.reindex(full_date_range)
+        solar = solar.fillna(0)
+        #solar = solar.dropna(subset=['datetime'])
 
         # === LOAD WEATHER DATA ===
         weather = pd.read_csv(site_weather_path)
@@ -71,10 +74,13 @@ def merge_solar_sutput_and_weather():
 
         # Combine date columns into a single datetime
         weather['datetime'] = pd.to_datetime(weather[['Year', 'Month', 'Day', 'Hour', 'Minute']], errors='coerce')
-        weather = weather.dropna(subset=['datetime'])
+        #weather = weather.dropna(subset=['datetime'])
 
         # === ROUND WEATHER TIMES UP TO NEAREST HOUR ===
         weather['datetime'] = weather['datetime'].dt.ceil('h')
+        weather.set_index('datetime', inplace=True)
+        weather = weather[weather['datetime'].dt.minute == 0]
+        
 
         # === MERGE DATASETS ===
         # We'll use "merge_asof" to attach the nearest *next* weather reading to each solar measurement
@@ -118,15 +124,16 @@ def merge_db():
 
 
 def clean_db(df):
+
+    df['datetime'] = pd.to_datetime(df['date'], format='%d/%m/%Y %H:%M')
     # Drop irrelevant or repeated columns
-    df.drop(columns=['address', 'public_url', 'installationDate', 'uid', 'date'], inplace=True)
+    df.drop(columns=['address', 'public_url', 'installationDate', 'uid'], inplace=True)
 
     # fix types
     df['kWh'] = (
         df['kWh'].replace(',','',regex=True)
         .astype('float64')
     )
-    df['datetime'] = pd.to_datetime(df['datetime'])
 
     #onehot encode the cloud type:
     encoder = OneHotEncoder(sparse_output=False, max_categories=15)
@@ -150,9 +157,9 @@ def clean_db(df):
     df['kWh Normalised'] = df['kWh']/df['maximumPower']
 
     # drop dates that have no weather data:
-    df.dropna(inplace=True)
+    #df.dropna(inplace=True)
 
-    df.drop(columns = ['name','id','maximumPower','Month','Day','Hour','dayOfYear', 'Year', 'Cloud Fill Flag', 'Cloud Type', 'Fill Flag'], inplace=True)
+    df.drop(columns = ['id','maximumPower','Month','Day','Hour','Minute','dayOfYear', 'Year', 'Cloud Fill Flag', 'Cloud Type', 'Fill Flag', 'Unnamed: 0'], inplace=True)
 
     df.to_csv(ROOT / "Data" / "DBCleaned.csv", index=False)
 
@@ -160,7 +167,7 @@ def clean_db(df):
 
  
 if __name__ == "__main__":
-    split_solar_data_by_site()
-    merge_solar_sutput_and_weather()
+    split_solar_output_data_by_site()
+    merge_solar_output_and_weather()
     df = merge_db()
     clean_db(df)
