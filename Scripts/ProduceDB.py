@@ -3,9 +3,38 @@ from pathlib import Path
 from typing import Optional
 from sklearn.preprocessing import OneHotEncoder
 import numpy as np
+import os
+import glob
 
 ROOT = script_dir = Path(__file__).resolve().parent.parent
 
+
+def concat_files():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    parent = os.path.dirname(script_dir)
+    parent_dir = os.path.join(parent, "Data", "NSRDB")
+    print(parent_dir)
+
+
+    for dir in os.listdir(parent_dir):
+        input_path = os.path.join(parent_dir, dir) 
+        output_path = os.path.join(input_path, f"{dir}_combined.csv")
+        
+        print(input_path)
+        if os.path.exists(output_path):
+            os.remove(output_path)
+        files = glob.glob(os.path.join(input_path, "*.csv"))
+
+        df = pd.read_csv(files[0], skiprows=2)
+        
+        i = 0
+        for f in files[1:]:
+            temp = pd.read_csv(f,skiprows=2)
+            df = pd.concat([df,temp], ignore_index=True)
+            df.to_csv(os.path.join(output_path), index=False)
+
+        df.to_csv(output_path, index=False)
+    return
 
 def split_solar_output_data_by_site():
     """
@@ -57,12 +86,18 @@ def merge_solar_output_and_weather():
 
         # === LOAD SOLAR DATA ===
         solar = pd.read_csv(site_solar_path)
-        solar['datetime'] = pd.to_datetime(solar['date'], format='%d/%m/%Y %H:%M', errors='coerce')
-        solar.set_index('datetime', inplace=True)
-        full_date_range = pd.date_range(start=df.index.min(), end=df.index.max(), freq='h')
-        solar = df.reindex(full_date_range)
-        solar = solar.fillna(0)
+        solar['date'] = pd.to_datetime(solar['date'], format='%d/%m/%Y %H:%M')
+        solar = solar[solar['date'].dt.minute == 0]
+        solar.sort_values('date', inplace=True)
+        solar.set_index('date', inplace=True)
+        full_range = pd.date_range(solar.index.min(), solar.index.max(), freq='H')
+        solar = solar.reindex(full_range)
+        solar['kWh'] = solar['kWh'].fillna(0)
+
+        for col in ['name', 'id', 'address', 'public_url', 'installationDate', 'uid']:
+            solar[col] = solar[col].fillna(method='ffill')
         #solar = solar.dropna(subset=['datetime'])
+        solar = solar.reset_index().rename(columns={'index': 'date'})
 
         # === LOAD WEATHER DATA ===
         weather = pd.read_csv(site_weather_path)
@@ -73,30 +108,35 @@ def merge_solar_output_and_weather():
         installations = installations[['id', 'maximumPower']]
 
         # Combine date columns into a single datetime
-        weather['datetime'] = pd.to_datetime(weather[['Year', 'Month', 'Day', 'Hour', 'Minute']], errors='coerce')
+        weather['date'] = pd.to_datetime(weather[['Year', 'Month', 'Day', 'Hour', 'Minute']], format='%d/%m/%Y %H:%M', errors='coerce')
+        weather = weather[weather['date'].dt.minute== 0]
         #weather = weather.dropna(subset=['datetime'])
 
         # === ROUND WEATHER TIMES UP TO NEAREST HOUR ===
-        weather['datetime'] = weather['datetime'].dt.ceil('h')
-        weather.set_index('datetime', inplace=True)
-        weather = weather[weather['datetime'].dt.minute == 0]
+        #weather.set_index('date', inplace=True)
         
 
         # === MERGE DATASETS ===
         # We'll use "merge_asof" to attach the nearest *next* weather reading to each solar measurement
+
+
         merged = pd.merge(
             solar,
             weather,
-            on='datetime',
-            how = 'left'
+            on='date',
+            how = 'outer'
         )
 
+        
         merged = pd.merge(
             merged,
             installations,
             on='id',
             how = 'left'
         )
+
+        merged.dropna(inplace=True)
+        print(merged.columns)
 
         # === SAVE OUTPUT ===
         merged.to_csv(site_output_path, index=True)
@@ -124,8 +164,7 @@ def merge_db():
 
 
 def clean_db(df):
-
-    df['datetime'] = pd.to_datetime(df['date'], format='%d/%m/%Y %H:%M')
+    df['datetime'] = pd.to_datetime(df['date'], format='%Y-%m-%d %H:%M:%S', errors='coerce')
     # Drop irrelevant or repeated columns
     df.drop(columns=['address', 'public_url', 'installationDate', 'uid'], inplace=True)
 
@@ -143,7 +182,11 @@ def clean_db(df):
     df = pd.concat([df, encoded_df], axis = 1, ignore_index=False)
 
     
+    
     df['dayOfYear'] = df['datetime'].dt.dayofyear
+    print(df.columns)
+    print(df.head())
+
 
     df['day_sine'] = np.sin(2 * np.pi * df['Hour'] / 24)
     df['day_cosine'] = np.cos(2 * np.pi * df['Hour'] / 24)
@@ -155,9 +198,10 @@ def clean_db(df):
 
     # normalise output by maximum power of site
     df['kWh Normalised'] = df['kWh']/df['maximumPower']
+   
 
     # drop dates that have no weather data:
-    #df.dropna(inplace=True)
+    df.dropna(inplace=True)
 
     df.drop(columns = ['id','maximumPower','Month','Day','Hour','Minute','dayOfYear', 'Year', 'Cloud Fill Flag', 'Cloud Type', 'Fill Flag', 'Unnamed: 0'], inplace=True)
 
@@ -167,6 +211,7 @@ def clean_db(df):
 
  
 if __name__ == "__main__":
+    concat_files()
     split_solar_output_data_by_site()
     merge_solar_output_and_weather()
     df = merge_db()

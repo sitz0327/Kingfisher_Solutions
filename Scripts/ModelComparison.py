@@ -51,7 +51,7 @@ dr_X_train, dr_X_test, dr_y_train, dr_y_test = train_test_split(X_nystroem, y, t
 #All Variables:
 #['name', 'kWh', 'datetime', 'Temperature', 'Alpha', 'Aerosol Optical Depth', 'Asymmetry', 'Clearsky DHI', 'Clearsky DNI','Clearsky GHI', 'Dew Point', 'DHI', 'DNI', 'GHI', 'Ozone','Relative Humidity', 'Solar Zenith Angle', 'SSA', 'Surface Albedo','Pressure', 'Precipitable Water', 'Wind Direction', 'Wind Speed','Global Horizontal UV Irradiance (280-400nm)', 'Global Horizontal UV Irradiance (295-385nm)', 'Cloud Type_0.0', 'Cloud Type_1.0', 'Cloud Type_3.0', 'Cloud Type_4.0', 'Cloud Type_5.0','Cloud Type_6.0', 'Cloud Type_7.0', 'Cloud Type_8.0', 'Cloud Type_9.0', 'Cloud Type_nan', 'day_sine', 'day_cosine', 'year_sine', 'year_cosine','kWh Normalised']
 # Selected variables
-X = df[['GHI', 'day_cosine', 'Dew Point', 'year_cosine', 'Relative Humidity', 'Temperature', 'Pressure', 'Clearsky GHI', 'Precipitable Water', 'Clearsky DHI']]
+X = df[['Global Horizontal UV Irradiance (280-400nm)', 'Global Horizontal UV Irradiance (295-385nm)', 'GHI', 'day_cosine', 'year_cosine', 'Relative Humidity', 'Temperature', 'Pressure', 'Clearsky GHI', 'Precipitable Water', 'Clearsky DHI', 'Solar Zenith Angle']]
 y = df[['kWh Normalised']]
 
 scaler = StandardScaler()
@@ -97,47 +97,47 @@ def append_metrics(model_name, test, pred, note, metrics_frame):
 
 
 
-## NON TimeSeries models:
+# NON TimeSeries models:
 
 
 
 
-# #LGBMRegressor
-# model_name = 'LGBM'
+#LGBMRegressor
+model_name = 'LGBM'
 
-# model = LGBMRegressor(n_estimators=5000, learning_rate=0.05, n_jobs=-1)
-
-
-# model.fit(X_train, y_train)
-# y_pred = model.predict(X_test)
-# metrics_frame = append_metrics(model_name, y_test, y_pred, "Selected variables (10)", metrics_frame)
+model = LGBMRegressor(n_estimators=5000, learning_rate=0.05, n_jobs=-1)
 
 
-# model.fit(dr_X_train, dr_y_train)
-# dr_y_pred = model.predict(dr_X_test)
-# metrics_frame = append_metrics(model_name, dr_y_test, dr_y_pred, "Dimensionally reduced (10)", metrics_frame)
+model.fit(X_train, y_train)
+y_pred = model.predict(X_test)
+metrics_frame = append_metrics(model_name, y_test, y_pred, "Selected variables (10)", metrics_frame)
+
+
+model.fit(dr_X_train, dr_y_train)
+dr_y_pred = model.predict(dr_X_test)
+metrics_frame = append_metrics(model_name, dr_y_test, dr_y_pred, "Dimensionally reduced (10)", metrics_frame)
 
 
 
-# # XGBoost
-# model_name = "XGBoost"
+# XGBoost
+model_name = "XGBoost"
 
-# model = XGBRegressor(
-#     n_estimators=5000,
-#     learning_rate=0.05,
-#     max_depth=5,
-#     subsample=0.8,
-#     colsample_bytree=0.8,
-#     random_state=510444756
-# )
+model = XGBRegressor(
+    n_estimators=5000,
+    learning_rate=0.05,
+    max_depth=5,
+    subsample=0.8,
+    colsample_bytree=0.8,
+    random_state=510444756
+)
 
-# model.fit(X_train, y_train)
-# y_pred = model.predict(X_test)
-# metrics_frame = append_metrics(model_name, y_test, y_pred, "Selected Variables (10)", metrics_frame)
+model.fit(X_train, y_train)
+y_pred = model.predict(X_test)
+metrics_frame = append_metrics(model_name, y_test, y_pred, "Selected Variables (10)", metrics_frame)
 
-# model.fit(dr_X_train, dr_y_train)
-# dr_y_pred = model.predict(dr_X_test)
-# metrics_frame = append_metrics(model_name, dr_y_test, dr_y_pred, "Dimensionally reduced (10)", metrics_frame)
+model.fit(dr_X_train, dr_y_train)
+dr_y_pred = model.predict(dr_X_test)
+metrics_frame = append_metrics(model_name, dr_y_test, dr_y_pred, "Dimensionally reduced (10)", metrics_frame)
 
 
 
