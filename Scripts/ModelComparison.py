@@ -6,12 +6,13 @@ import matplotlib.pyplot as plt
 from tabulate import tabulate
 
 from darts import TimeSeries
-from darts.models import TFTModel
+from darts.models import TFTModel, NBEATSModel
+from darts.metrics import rmse, mse, mae, r2_score ,confusion_matrix
 from darts.models.forecasting.rnn_model import RNNModel
 from darts.dataprocessing.transformers.scaler import Scaler
 
 from sklearn.model_selection import train_test_split, StratifiedKFold
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score, make_scorer, accuracy_score
+from sklearn.metrics import mean_absolute_error, mean_squared_error, make_scorer, accuracy_score, root_mean_squared_error
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.kernel_approximation import Nystroem
@@ -33,7 +34,6 @@ OUTPUT = 'kWh Normalised'
 SEED = 510444756
 
 df = pd.read_csv(DB_FILEPATH)
-print(df.columns)
 
 X = df.select_dtypes(include=['float64', 'int64']).drop(columns=[OUTPUT, 'kWh'])
 y = df[OUTPUT]
@@ -73,8 +73,9 @@ models = {
 
 ## Evaluation
 metrics = {
-    'MAE': mean_absolute_error,
-    'MSE': mean_squared_error,
+    'RMSE': rmse,
+    'MAE': mae,
+    'MSE': mse,
     'r2': r2_score
 }
 metrics_frame = pd.DataFrame()
@@ -99,9 +100,6 @@ def append_metrics(model_name, test, pred, note, metrics_frame):
 
 # NON TimeSeries models:
 
-
-
-
 #LGBMRegressor
 model_name = 'LGBM'
 
@@ -110,16 +108,16 @@ model = LGBMRegressor(n_estimators=5000, learning_rate=0.05, n_jobs=-1)
 
 model.fit(X_train, y_train)
 y_pred = model.predict(X_test)
-metrics_frame = append_metrics(model_name, y_test, y_pred, "Selected variables (10)", metrics_frame)
+metrics_frame = append_metrics(model_name, y_test, y_pred, "Selected variables (12)", metrics_frame)
 
 
 model.fit(dr_X_train, dr_y_train)
 dr_y_pred = model.predict(dr_X_test)
-metrics_frame = append_metrics(model_name, dr_y_test, dr_y_pred, "Dimensionally reduced (10)", metrics_frame)
+metrics_frame = append_metrics(model_name, dr_y_test, dr_y_pred, "Dimensionally reduced (12)", metrics_frame)
 
 
 
-# XGBoost
+# # XGBoost
 model_name = "XGBoost"
 
 model = XGBRegressor(
@@ -133,11 +131,11 @@ model = XGBRegressor(
 
 model.fit(X_train, y_train)
 y_pred = model.predict(X_test)
-metrics_frame = append_metrics(model_name, y_test, y_pred, "Selected Variables (10)", metrics_frame)
+metrics_frame = append_metrics(model_name, y_test, y_pred, "Selected Variables (12)", metrics_frame)
 
 model.fit(dr_X_train, dr_y_train)
 dr_y_pred = model.predict(dr_X_test)
-metrics_frame = append_metrics(model_name, dr_y_test, dr_y_pred, "Dimensionally reduced (10)", metrics_frame)
+metrics_frame = append_metrics(model_name, dr_y_test, dr_y_pred, "Dimensionally reduced (12)", metrics_frame)
 
 
 
@@ -156,10 +154,10 @@ tf_models = {
     Dropout(0.2),
     Dense(32, activation='relu'),
     Dropout(0.3),
-    Dense(1)]),
+    Dense(1, activation='linear')]),
 }
 
-model_name = "FNNBatchNorm"
+model_name = "FNN"
 model = tf_models[model_name]
 
 model.compile(
@@ -173,7 +171,7 @@ early_stop = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights
 history = model.fit(
     X_train, y_train,
     validation_split=0.2,
-    epochs=200,
+    epochs=100,
     batch_size=32,
     callbacks=[early_stop],
     verbose=1
@@ -181,7 +179,7 @@ history = model.fit(
 
 y_pred = model.predict(X_test).flatten()
 
-metrics_frame = append_metrics(model_name, y_test, y_pred, "Selected Variables (10)", metrics_frame)
+metrics_frame = append_metrics(model_name, y_test, y_pred, "Selected Variables (12)", metrics_frame)
 
 # Training curve
 plt.plot(history.history['loss'], label='Train Loss')
@@ -201,4 +199,210 @@ plt.ylabel('Predicted kWh_normalised')
 plt.title('Prediction Performance')
 plt.show()
 
-print(tabulate(metrics_frame, headers='keys', tablefmt='pretty', showindex=False))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Sequential/ timeseries analysis using Darts
+
+site_names = df['name'].unique()
+
+target_series_list = []
+past_covar_list = []
+future_covar_list = []
+
+for site in site_names:
+    df_site = df[df['name'] == site].sort_values('date')
+
+    #produce target and covariate time series
+    target_series = TimeSeries.from_dataframe(df_site, time_col='date', value_cols='kWh Normalised', freq = 'h')
+    past_covariates = TimeSeries.from_dataframe(df_site, time_col='date', freq='h', value_cols=['Global Horizontal UV Irradiance (280-400nm)', 'Global Horizontal UV Irradiance (295-385nm)', 'GHI', 'day_cosine', 'year_cosine', 'Relative Humidity', 'Temperature', 'Pressure', 'Clearsky GHI', 'Precipitable Water', 'Clearsky DHI', 'Solar Zenith Angle'])
+    future_covariates = TimeSeries.from_dataframe(df_site, time_col='date', freq='h', value_cols=['GHI', 'day_cosine', 'year_cosine', 'Relative Humidity', 'Temperature', 'Pressure', 'Clearsky GHI', 'Precipitable Water', 'Clearsky DHI', 'Solar Zenith Angle'])
+
+    #align start and end times for each timeseries
+    start = max(target_series.start_time(), past_covariates.start_time(), future_covariates.start_time())
+    end = min(target_series.end_time(), past_covariates.end_time(), future_covariates.end_time())
+    target_series, past_covariates, future_covariates = target_series.slice(start, end), past_covariates.slice(start, end), future_covariates.slice(start, end)
+
+    #
+    target_series_list.append(target_series)
+    past_covar_list.append(past_covariates)
+    future_covar_list.append(future_covariates)
+
+# Split (e.g., 80% train, 20% test)
+target_scaler= Scaler()
+past_covar_scaler= Scaler()
+future_covar_scaler= Scaler()
+
+series_scaled_list = target_scaler.fit_transform(target_series_list)
+past_covar_scaled_list = past_covar_scaler.fit_transform(past_covar_list)
+future_covar_scaled_list = future_covar_scaler.fit_transform(future_covar_list)
+
+
+train_series = []
+test_series = []
+train_past_covar = []
+test_past_covar = []
+train_future_covar = []
+test_future_covar = []
+
+for s, p, f in zip(series_scaled_list, past_covar_scaled_list, future_covar_scaled_list):
+    train, test = s.split_before(0.8)
+    p_train, p_test = p.split_before(0.8)
+    f_train, f_test = f.split_before(0.8)
+ 
+
+    train_series.append(train)
+    test_series.append(test)
+    train_past_covar.append(p_train)
+    test_past_covar.append(p)
+    train_future_covar.append(f_train)
+    test_future_covar.append(f)
+
+
+
+
+## TFTModel
+model = TFTModel(
+    input_chunk_length=24,   # how many past steps it looks at
+    output_chunk_length=6,  # how many future steps to predict
+    hidden_size=32,
+    lstm_layers=1,
+    n_epochs=1,
+    batch_size=32,
+    dropout=0.1,
+    random_state=SEED,
+    add_relative_index = True
+)
+
+
+
+model.fit(series=train_series, past_covariates=train_past_covar, future_covariates = train_future_covar,  verbose=True)
+
+model.save("TFTmodel")
+model = TFTModel.load("TFTmodel")
+
+forecasts = []
+for train, test, p_test, f_test in zip(train_series, test_series, test_past_covar, test_future_covar):
+    forecast = model.predict(series=train, n=len(test), past_covariates=p_test, future_covariates=f_test)
+    forecasts.append(forecast)
+
+
+print(" EVAL RESULTS FOR TFTMODEL:")
+for site, actual, forecast in zip(site_names, test_series, forecasts):
+    print(f"{site}: RMSE={rmse(actual, forecast):.3f}, MAE={mae(actual, forecast):.3f}, r2={r2_score(actual, forecast)}")
+
+scores = []
+for site_name, s in zip(site_names, series_scaled_list):
+        score = model.backtest(
+            series=s,
+            start=0.8,
+            forecast_horizon=6,
+            stride=6,
+            metric=[rmse,mae,r2_score],
+            verbose=False,
+            overlap_end=False
+        )
+        scores.append((site_name, score))
+        print(f"{site_name}: RMSE={score:.3f}")
+
+
+
+##N-Beats
+model = NBEATSModel(
+    input_chunk_length=24,   # how many past steps it looks at
+    output_chunk_length=6,  # how many future steps to predict
+    n_epochs=1,
+    dropout=0.1,
+    random_state=SEED,
+)
+
+# Fit
+model.fit(train_series, past_covariates=train_past_covar,  verbose=True)
+
+# model.save("NBEATSmodel")
+model = NBEATSModel.load("NBEATSmodel")
+
+forecasts = []
+for train, test, p_test, f_test in zip(train_series, test_series, test_past_covar, test_future_covar):
+    forecast = model.predict(series=train, n=len(test), past_covariates=p_test, verbose = True)
+    forecasts.append(forecast)
+
+print(" EVAL RESULTS FOR NBEATSMODEL:")
+for site, actual, forecast in zip(site_names, test_series, forecasts):
+    print(f"{site}: RMSE={rmse(actual, forecast):.3f}, MAE={mae(actual, forecast):.3f}, r2={r2_score(actual, forecast)}")
+
+
+scores = []
+for site_name, s in zip(site_names, series_scaled_list):
+        score = model.backtest(
+            series=s,
+            start=0.8,
+            forecast_horizon=6,
+            stride=6,
+            metric=[rmse,mae,r2_score],
+            verbose=False,
+            overlap_end=False
+        )
+        scores.append((site_name, score))
+        print(f"{site_name}: RMSE={score:.3f}")
+
+
+
+# Probabilistic RNN
+model = RNNModel(
+    input_chunk_length = 24,
+    model="RNN",
+    hidden_dim=25,
+    n_rnn_layers=1,
+    dropout=0.1,
+    training_length=24,
+    n_epochs=100,
+    random_state = SEED,
+)
+
+model.fit(train_series, past_covariates=train_past_covar, future_covariates=train_future_covar, verbose=True)
+
+model.save("RNNModel")
+model = NBEATSModel.load("RNNModel")
+
+forecasts = []
+for train, test, p_test, f_test in zip(train_series, test_series, test_past_covar, test_future_covar):
+    forecast = model.predict(series=train, n=len(test), past_covariates=p_test, future_covariates=f_test, verbose = True)
+    forecasts.append(forecast)
+
+print(" EVAL RESULTS FOR RNNMODEL:")
+for site, actual, forecast in zip(site_names, test_series, forecasts):
+    print(f"{site}: RMSE={rmse(actual, forecast):.3f}, MAE={mae(actual, forecast):.3f}, r2={r2_score(actual, forecast)}")
+
+scores = []
+for site_name, s in zip(site_names, series_scaled_list):
+        score = model.backtest(
+            series=s,
+            start=0.8,
+            forecast_horizon=6,
+            stride=6,
+            metric=[rmse,mae,r2_score],
+            verbose=False,
+            overlap_end=False
+        )
+        scores.append((site_name, score))
+        print(f"{site_name}: RMSE={score:.3f}")
