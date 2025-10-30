@@ -9,10 +9,12 @@ from darts import TimeSeries
 from darts.models import TFTModel, NBEATSModel
 from darts.metrics import rmse, mse, mae, r2_score ,confusion_matrix
 from darts.models.forecasting.rnn_model import RNNModel
+from darts.models.forecasting.tsmixer_model import TSMixerModel
 from darts.dataprocessing.transformers.scaler import Scaler
 
 from sklearn.model_selection import train_test_split, StratifiedKFold
-from sklearn.metrics import mean_absolute_error, mean_squared_error, make_scorer, accuracy_score, root_mean_squared_error
+from sklearn.metrics import mean_absolute_error, mean_squared_error, make_scorer, accuracy_score, root_mean_squared_error, confusion_matrix
+import sklearn.metrics as Metrics
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.kernel_approximation import Nystroem
@@ -51,7 +53,7 @@ dr_X_train, dr_X_test, dr_y_train, dr_y_test = train_test_split(X_nystroem, y, t
 #All Variables:
 #['name', 'kWh', 'datetime', 'Temperature', 'Alpha', 'Aerosol Optical Depth', 'Asymmetry', 'Clearsky DHI', 'Clearsky DNI','Clearsky GHI', 'Dew Point', 'DHI', 'DNI', 'GHI', 'Ozone','Relative Humidity', 'Solar Zenith Angle', 'SSA', 'Surface Albedo','Pressure', 'Precipitable Water', 'Wind Direction', 'Wind Speed','Global Horizontal UV Irradiance (280-400nm)', 'Global Horizontal UV Irradiance (295-385nm)', 'Cloud Type_0.0', 'Cloud Type_1.0', 'Cloud Type_3.0', 'Cloud Type_4.0', 'Cloud Type_5.0','Cloud Type_6.0', 'Cloud Type_7.0', 'Cloud Type_8.0', 'Cloud Type_9.0', 'Cloud Type_nan', 'day_sine', 'day_cosine', 'year_sine', 'year_cosine','kWh Normalised']
 # Selected variables
-X = df[['Global Horizontal UV Irradiance (280-400nm)', 'Global Horizontal UV Irradiance (295-385nm)', 'GHI', 'day_cosine', 'year_cosine', 'Relative Humidity', 'Temperature', 'Pressure', 'Clearsky GHI', 'Precipitable Water', 'Clearsky DHI', 'Solar Zenith Angle']]
+X = df[['Global Horizontal UV Irradiance (280-400nm)', 'Global Horizontal UV Irradiance (295-385nm)', 'GHI', 'Relative Humidity', 'Temperature', 'Pressure', 'Clearsky GHI', 'Precipitable Water', 'Clearsky DHI', 'Solar Zenith Angle']] # 'day_cosine', 'year_cosine',
 y = df[['kWh Normalised']]
 
 scaler = StandardScaler()
@@ -98,106 +100,106 @@ def append_metrics(model_name, test, pred, note, metrics_frame):
 
 
 
-# NON TimeSeries models:
+# # NON TimeSeries models:
 
-#LGBMRegressor
-model_name = 'LGBM'
+# #LGBMRegressor
+# model_name = 'LGBM'
 
-model = LGBMRegressor(n_estimators=5000, learning_rate=0.05, n_jobs=-1)
-
-
-model.fit(X_train, y_train)
-y_pred = model.predict(X_test)
-metrics_frame = append_metrics(model_name, y_test, y_pred, "Selected variables (12)", metrics_frame)
+# model = LGBMRegressor(n_estimators=5000, learning_rate=0.05, n_jobs=-1)
 
 
-model.fit(dr_X_train, dr_y_train)
-dr_y_pred = model.predict(dr_X_test)
-metrics_frame = append_metrics(model_name, dr_y_test, dr_y_pred, "Dimensionally reduced (12)", metrics_frame)
+# model.fit(X_train, y_train)
+# y_pred = model.predict(X_test)
+# metrics_frame = append_metrics(model_name, y_test, y_pred, "Selected variables (12)", metrics_frame)
 
 
-
-# # XGBoost
-model_name = "XGBoost"
-
-model = XGBRegressor(
-    n_estimators=5000,
-    learning_rate=0.05,
-    max_depth=5,
-    subsample=0.8,
-    colsample_bytree=0.8,
-    random_state=510444756
-)
-
-model.fit(X_train, y_train)
-y_pred = model.predict(X_test)
-metrics_frame = append_metrics(model_name, y_test, y_pred, "Selected Variables (12)", metrics_frame)
-
-model.fit(dr_X_train, dr_y_train)
-dr_y_pred = model.predict(dr_X_test)
-metrics_frame = append_metrics(model_name, dr_y_test, dr_y_pred, "Dimensionally reduced (12)", metrics_frame)
+# model.fit(dr_X_train, dr_y_train)
+# dr_y_pred = model.predict(dr_X_test)
+# metrics_frame = append_metrics(model_name, dr_y_test, dr_y_pred, "Dimensionally reduced (12)", metrics_frame)
 
 
 
-#TensorFlow NN
-tf_models = {
-    "FNNBatchNorm": Sequential([
-    Dense(160, activation='relu', input_shape=(X_train.shape[1],)),
-    Dropout(0.2),
-    BatchNormalization(),
-    Dense(32, activation='relu'),
-    Dropout(0.3),
-    Dense(1)]),
+# # # XGBoost
+# model_name = "XGBoost"
 
-    "FNN": Sequential([
-    Dense(160, activation='relu', input_shape=(X_train.shape[1],)),
-    Dropout(0.2),
-    Dense(32, activation='relu'),
-    Dropout(0.3),
-    Dense(1, activation='linear')]),
-}
+# model = XGBRegressor(
+#     n_estimators=5000,
+#     learning_rate=0.05,
+#     max_depth=5,
+#     subsample=0.8,
+#     colsample_bytree=0.8,
+#     random_state=510444756
+# )
 
-model_name = "FNN"
-model = tf_models[model_name]
+# model.fit(X_train, y_train)
+# y_pred = model.predict(X_test)
+# metrics_frame = append_metrics(model_name, y_test, y_pred, "Selected Variables (12)", metrics_frame)
 
-model.compile(
-    optimizer='adam',
-    loss='mse',
-    metrics=['mae']
-)
+# model.fit(dr_X_train, dr_y_train)
+# dr_y_pred = model.predict(dr_X_test)
+# metrics_frame = append_metrics(model_name, dr_y_test, dr_y_pred, "Dimensionally reduced (12)", metrics_frame)
 
-early_stop = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
 
-history = model.fit(
-    X_train, y_train,
-    validation_split=0.2,
-    epochs=100,
-    batch_size=32,
-    callbacks=[early_stop],
-    verbose=1
-)
 
-y_pred = model.predict(X_test).flatten()
+# #TensorFlow NN
+# tf_models = {
+#     "FNNBatchNorm": Sequential([
+#     Dense(160, activation='relu', input_shape=(X_train.shape[1],)),
+#     Dropout(0.2),
+#     BatchNormalization(),
+#     Dense(32, activation='relu'),
+#     Dropout(0.3),
+#     Dense(1)]),
 
-metrics_frame = append_metrics(model_name, y_test, y_pred, "Selected Variables (12)", metrics_frame)
+#     "FNN": Sequential([
+#     Dense(160, activation='relu', input_shape=(X_train.shape[1],)),
+#     Dropout(0.2),
+#     Dense(32, activation='relu'),
+#     Dropout(0.3),
+#     Dense(1, activation='linear')]),
+# }
 
-# Training curve
-plt.plot(history.history['loss'], label='Train Loss')
-plt.plot(history.history['val_loss'], label='Val Loss')
-plt.legend()
-plt.title('Training History')
-plt.xlabel('Epochs')
-plt.ylabel('MSE Loss')
-plt.show()
+# model_name = "FNN"
+# model = tf_models[model_name]
 
-# Predictions vs Actual
-plt.figure(figsize=(6,6))
-plt.scatter(y_test, y_pred, alpha=0.7)
-plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
-plt.xlabel('Actual kWh_normalised')
-plt.ylabel('Predicted kWh_normalised')
-plt.title('Prediction Performance')
-plt.show()
+# model.compile(
+#     optimizer='adam',
+#     loss='mse',
+#     metrics=['mae']
+# )
+
+# early_stop = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
+
+# history = model.fit(
+#     X_train, y_train,
+#     validation_split=0.2,
+#     epochs=100,
+#     batch_size=32,
+#     callbacks=[early_stop],
+#     verbose=1
+# )
+
+# y_pred = model.predict(X_test).flatten()
+
+# metrics_frame = append_metrics(model_name, y_test, y_pred, "Selected Variables (12)", metrics_frame)
+
+# # Training curve
+# plt.plot(history.history['loss'], label='Train Loss')
+# plt.plot(history.history['val_loss'], label='Val Loss')
+# plt.legend()
+# plt.title('Training History')
+# plt.xlabel('Epochs')
+# plt.ylabel('MSE Loss')
+# plt.show()
+
+# # Predictions vs Actual
+# plt.figure(figsize=(6,6))
+# plt.scatter(y_test, y_pred, alpha=0.7)
+# plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
+# plt.xlabel('Actual kWh_normalised')
+# plt.ylabel('Predicted kWh_normalised')
+# plt.title('Prediction Performance')
+# plt.show()
 
 
 
@@ -281,128 +283,255 @@ for s, p, f in zip(series_scaled_list, past_covar_scaled_list, future_covar_scal
 
 
 ## TFTModel
-model = TFTModel(
-    input_chunk_length=24,   # how many past steps it looks at
-    output_chunk_length=6,  # how many future steps to predict
-    hidden_size=32,
-    lstm_layers=1,
-    n_epochs=1,
-    batch_size=32,
-    dropout=0.1,
-    random_state=SEED,
-    add_relative_index = True
-)
+# model_name = "TFTModel"
+# model = TFTModel(
+#     input_chunk_length=48,   # how many past steps it looks at
+#     output_chunk_length=12,  # how many future steps to predict
+#     hidden_size=32,
+#     lstm_layers=2,
+#     n_epochs=25,
+#     batch_size=32,
+#     dropout=0.1,
+#     random_state=SEED,
+#     add_relative_index = True,
+#     force_reset = True,
+#     save_checkpoints=True,
+#     model_name = model_name,
+#     work_dir = os.path.join(os.path.dirname(DB_FILEPATH), model_name),
+#     add_encoders={
+#         'datetime_attribute': {
+#             'past': ['hour', 'dayofyear'],
+#             'future': ['hour' , 'dayofyear']
+#         },
+#         'cyclic': {
+#             'past': ['hour', 'dayofyear'],
+#             'future': ['hour' , 'dayofyear']
+#         }
+#     }
+# )
 
 
 
-model.fit(series=train_series, past_covariates=train_past_covar, future_covariates = train_future_covar,  verbose=True)
+# model.fit(series=train_series, past_covariates=train_past_covar, future_covariates = train_future_covar,  verbose=True)
 
-model.save("TFTmodel")
-model = TFTModel.load("TFTmodel")
+# model.save("TFTmodel")
+# model = TFTModel.load("TFTmodel")
+# model = TFTModel.load_from_checkpoint("TFTModel", best=False)
 
-forecasts = []
-for train, test, p_test, f_test in zip(train_series, test_series, test_past_covar, test_future_covar):
-    forecast = model.predict(series=train, n=len(test), past_covariates=p_test, future_covariates=f_test)
-    forecasts.append(forecast)
-
-
-print(" EVAL RESULTS FOR TFTMODEL:")
-for site, actual, forecast in zip(site_names, test_series, forecasts):
-    print(f"{site}: RMSE={rmse(actual, forecast):.3f}, MAE={mae(actual, forecast):.3f}, r2={r2_score(actual, forecast)}")
-
-scores = []
-for site_name, s in zip(site_names, series_scaled_list):
-        score = model.backtest(
-            series=s,
-            start=0.8,
-            forecast_horizon=6,
-            stride=6,
-            metric=[rmse,mae,r2_score],
-            verbose=False,
-            overlap_end=False
-        )
-        scores.append((site_name, score))
-        print(f"{site_name}: RMSE={score:.3f}")
+# forecasts = []
+# for train, test, p_test, f_test in zip(train_series, test_series, test_past_covar, test_future_covar):
+#     forecast = model.predict(series=train, n=len(test), past_covariates=p_test, future_covariates=f_test)
+#     forecasts.append(forecast)
+#     test.plot()
+#     forecast.plot()
+#     plt.show
 
 
+# print(" EVAL RESULTS FOR TFTMODEL:")
+# for site, actual, forecast in zip(site_names, test_series, forecasts):
+#     print(f"{site}: RMSE={rmse(actual, forecast):.3f}, MAE={mae(actual, forecast):.3f}, r2={r2_score(actual, forecast)}")
 
-##N-Beats
-model = NBEATSModel(
-    input_chunk_length=24,   # how many past steps it looks at
-    output_chunk_length=6,  # how many future steps to predict
-    n_epochs=1,
-    dropout=0.1,
-    random_state=SEED,
-)
+# scores = []
+# for site_name, s in zip(site_names, series_scaled_list):
+#         score = model.backtest(
+#             series=s,
+#             start=0.8,
+#             forecast_horizon=6,
+#             stride=6,
+#             metric=[rmse,mae,r2_score],
+#             verbose=False,
+#             overlap_end=False,
+#             retrain=False
+#         )
+#         scores.append((site_name, score))
+#         print(f"{site_name}: RMSE={score:.3f}, mae={score[1]:.3f}, r2={score[2]:.3f}")
 
-# Fit
-model.fit(train_series, past_covariates=train_past_covar,  verbose=True)
+
+
+# ##N-Beats
+# model = NBEATSModel(
+#     input_chunk_length=24,   # how many past steps it looks at
+#     output_chunk_length=6,  # how many future steps to predict
+#     n_epochs=50,
+#     dropout=0.1,
+#     random_state=SEED,
+#     force_reset = True,
+#     save_checkpoints=True,
+#     model_name = "NBEATSModel"
+# )
+
+# # Fit
+# model.fit(train_series, past_covariates=train_past_covar,  verbose=True)
 
 # model.save("NBEATSmodel")
-model = NBEATSModel.load("NBEATSmodel")
+#model = NBEATSModel.load("NBEATSmodel")
 
-forecasts = []
-for train, test, p_test, f_test in zip(train_series, test_series, test_past_covar, test_future_covar):
-    forecast = model.predict(series=train, n=len(test), past_covariates=p_test, verbose = True)
-    forecasts.append(forecast)
+# forecasts = []
+# for train, test, p_test, f_test in zip(train_series, test_series, test_past_covar, test_future_covar):
+#     forecast = model.predict(series=train, n=len(test), past_covariates=p_test, verbose = True)
+#     forecasts.append(forecast)
 
-print(" EVAL RESULTS FOR NBEATSMODEL:")
-for site, actual, forecast in zip(site_names, test_series, forecasts):
-    print(f"{site}: RMSE={rmse(actual, forecast):.3f}, MAE={mae(actual, forecast):.3f}, r2={r2_score(actual, forecast)}")
+# print(" EVAL RESULTS FOR NBEATSMODEL:")
+# for site, actual, forecast in zip(site_names, test_series, forecasts):
+#     print(f"{site}: RMSE={rmse(actual, forecast):.3f}, MAE={mae(actual, forecast):.3f}, r2={r2_score(actual, forecast)}")
 
 
-scores = []
-for site_name, s in zip(site_names, series_scaled_list):
-        score = model.backtest(
-            series=s,
-            start=0.8,
-            forecast_horizon=6,
-            stride=6,
-            metric=[rmse,mae,r2_score],
-            verbose=False,
-            overlap_end=False
-        )
-        scores.append((site_name, score))
-        print(f"{site_name}: RMSE={score:.3f}")
+# scores = []
+# for site_name, s in zip(site_names, series_scaled_list):
+#         score = model.backtest(
+#             series=s,
+#             start=0.8,
+#             forecast_horizon=6,
+#             stride=6,
+#             metric=[rmse,mae,r2_score],
+#             verbose=False,
+#             overlap_end=False
+#         )
+#         scores.append((site_name, score))
+#         print(f"{site_name}: RMSE={score:.3f}")
 
 
 
 # Probabilistic RNN
-model = RNNModel(
-    input_chunk_length = 24,
-    model="RNN",
-    hidden_dim=25,
-    n_rnn_layers=1,
-    dropout=0.1,
-    training_length=24,
-    n_epochs=100,
-    random_state = SEED,
-)
+# model_name = "RNNModel"
+# model = RNNModel(
+#     input_chunk_length = 24,
+#     model="LSTM",
+#     hidden_dim=25,
+#     n_rnn_layers=1,
+#     dropout=0.1,
+#     training_length=24,
+#     n_epochs = 3,
+#     random_state = SEED,
+#     force_reset = True,
+#     save_checkpoints=True,
+#     model_name = "RNNModel",
+#     work_dir = os.path.join(os.path.dirname(DB_FILEPATH), model_name),
+#     add_encoders={
+#         'datetime_attribute': {
+#             'past': ['hour', 'dayofyear'],
+#             'future': ['hour' , 'dayofyear']
+#         },
+#         'cyclic': {
+#             'past': ['hour', 'dayofyear'],
+#             'future': ['hour' , 'dayofyear']
+#         }
+#     }
+# )
 
-model.fit(train_series, past_covariates=train_past_covar, future_covariates=train_future_covar, verbose=True)
+# model.fit(train_series, future_covariates=train_future_covar, verbose=True)
 
-model.save("RNNModel")
-model = NBEATSModel.load("RNNModel")
+# model.save(model_name)
+# model = RNNModel.load(model_name)
+# # model = RNNModel.load_from_checkpoint(model_name, best = False)
 
-forecasts = []
-for train, test, p_test, f_test in zip(train_series, test_series, test_past_covar, test_future_covar):
-    forecast = model.predict(series=train, n=len(test), past_covariates=p_test, future_covariates=f_test, verbose = True)
-    forecasts.append(forecast)
+# forecasts = []
+# for train, test, p_test, f_test in zip(train_series, test_series, test_past_covar, test_future_covar):
+#     forecast = model.predict(series=train, n=len(test), future_covariates=f_test, verbose = True)
+#     forecasts.append(forecast)
+    
 
-print(" EVAL RESULTS FOR RNNMODEL:")
-for site, actual, forecast in zip(site_names, test_series, forecasts):
-    print(f"{site}: RMSE={rmse(actual, forecast):.3f}, MAE={mae(actual, forecast):.3f}, r2={r2_score(actual, forecast)}")
+# print(" EVAL RESULTS FOR RNNMODEL:")
+# for site, actual, forecast in zip(site_names, test_series, forecasts):
+#     forecast = target_scaler.inverse_transform(forecast)
+#     actual  = target_scaler.inverse_transform(test)
+#     print(f"{site}: RMSE={rmse(actual, forecast):.3f}, MAE={mae(actual, forecast):.3f}, r2={r2_score(actual, forecast)}")
+#         # Plot both
+#     plt.figure(figsize=(10, 6))
+#     actual.plot(label="Actual", lw=2)
+#     forecast.plot(label="Forecast", lw=2, color='orange')
+#     plt.title("Actual vs Predicted (RNNModel Forecast)")
+#     plt.legend()
+#     plt.show()
 
-scores = []
-for site_name, s in zip(site_names, series_scaled_list):
-        score = model.backtest(
-            series=s,
-            start=0.8,
-            forecast_horizon=6,
-            stride=6,
-            metric=[rmse,mae,r2_score],
-            verbose=False,
-            overlap_end=False
-        )
-        scores.append((site_name, score))
-        print(f"{site_name}: RMSE={score:.3f}")
+# scores = []
+# for site_name, s,p,f in zip(site_names, series_scaled_list,past_covar_scaled_list, future_covar_scaled_list):
+#         score = model.backtest(
+#             series=s,
+#             start=0.8,
+#             forecast_horizon=6,
+#             stride=6,
+#             metric=[rmse,mae,r2_score],
+#             verbose=False,
+#             overlap_end=False,
+#             retrain = False
+#         )
+#         scores.append((site_name, score))
+#         print(f"{site_name}: RMSE={score:.3f}, mae={score[1]:.3f}, r2={score[2]:.3f}")
+
+
+
+
+
+
+
+
+# TS Mixer
+# model_name="TSMixerModel"
+# model = TSMixerModel(
+#     input_chunk_length = 48,
+#     output_chunk_length = 12,
+#     hidden_size=64,
+#     dropout=0.1,
+#     n_epochs=1,
+#     random_state = SEED,
+#     force_reset = True,
+#     save_checkpoints=True,
+#     model_name = model_name,
+#     work_dir = os.path.join(os.path.dirname(DB_FILEPATH), model_name),
+#     add_encoders={
+#         'datetime_attribute': {
+#             'past': ['hour', 'dayofyear'],
+#             'future': ['hour' , 'dayofyear']
+#         },
+#         'cyclic': {
+#             'past': ['hour', 'dayofyear'],
+#             'future': ['hour' , 'dayofyear']
+#         }
+#     }
+# )
+
+# model.fit(train_series, past_covariates=train_past_covar, future_covariates=train_future_covar, verbose=True)
+
+# model.save(model_name)
+# # model = TSMixerModel.load(model_name)
+# # model = TSMixerModel.load_from_checkpoint(model_name, best = False)
+
+# forecasts = []
+# for train, test, p_test, f_test in zip(train_series, test_series, test_past_covar, test_future_covar):
+#     forecast = model.predict(series=train, n=len(test), past_covariates=p_test, future_covariates=f_test, verbose = True)
+#     forecasts.append(forecast)
+#     # Invert scaling if needed
+#     actual = target_scaler.inverse_transform(test)
+#     forecast = target_scaler.inverse_transform(forecast)
+
+#     # Plot both
+#     plt.figure(figsize=(10, 6))
+#     actual.plot(label="Actual", lw=2)
+#     forecast.plot(label="Forecast", lw=2, color='orange')
+#     plt.title("Actual vs Predicted (TSMixer Forecast)")
+#     plt.legend()
+#     plt.show()
+
+# print(f"EVAL RESULTS FOR {model_name}:")
+# for site, actual, forecast in zip(site_names, test_series, forecasts):
+#     print(actual)
+#     print(f"{site}: RMSE={rmse(actual, forecast):.3f}, MAE={mae(actual, forecast):.3f}, r2={r2_score(actual, forecast)}")
+
+# scores = []
+# for site_name, s, p, f in zip(site_names, series_scaled_list, past_covar_scaled_list, future_covar_scaled_list):
+#         score = model.backtest(
+#             series=s,
+#             start=0.8,
+#             forecast_horizon=6,
+#             past_covariates = p,
+#             future_covariates = f,
+#             stride=6,
+#             metric=[rmse,mae,r2_score],
+#             verbose=False,
+#             overlap_end=False,
+#             retrain = False
+#         )
+#         scores.append((site_name, score))
+        
+#         print(f"{site_name}: RMSE={score[0]:.3f}, mae={score[1]:.3f}, r2={score[2]:.3f}")
