@@ -224,7 +224,7 @@ def append_metrics(model_name, test, pred, note, metrics_frame):
 
 
 ## Sequential/ timeseries analysis using Darts
-
+model_average_scores = {}
 site_names = df['name'].unique()
 
 target_series_list = []
@@ -283,10 +283,10 @@ for s, p, f in zip(series_scaled_list, past_covar_scaled_list, future_covar_scal
 
 
 ## TFTModel
-# model_name = "TFTModel"
+model_name = "TFTModel"
 # model = TFTModel(
-#     input_chunk_length=48,   # how many past steps it looks at
-#     output_chunk_length=12,  # how many future steps to predict
+#     input_chunk_length=24,   # how many past steps it looks at
+#     output_chunk_length=6,  # how many future steps to predict
 #     hidden_size=32,
 #     lstm_layers=2,
 #     n_epochs=25,
@@ -316,20 +316,29 @@ for s, p, f in zip(series_scaled_list, past_covar_scaled_list, future_covar_scal
 
 # model.save("TFTmodel")
 # model = TFTModel.load("TFTmodel")
-# model = TFTModel.load_from_checkpoint("TFTModel", best=False)
+model = TFTModel.load_from_checkpoint("TFTModel", best=False, work_dir=os.path.join(os.path.dirname(DB_FILEPATH), model_name))
 
-# forecasts = []
-# for train, test, p_test, f_test in zip(train_series, test_series, test_past_covar, test_future_covar):
-#     forecast = model.predict(series=train, n=len(test), past_covariates=p_test, future_covariates=f_test)
-#     forecasts.append(forecast)
-#     test.plot()
-#     forecast.plot()
-#     plt.show
+forecasts = []
+for train, test, p_test, f_test in zip(train_series, test_series, test_past_covar, test_future_covar):
+    forecast = model.predict(series=train, n=len(test), past_covariates=p_test, future_covariates=f_test)
+    forecasts.append(forecast)
+    test.plot()
+    forecast.plot()
+    plt.show
 
 
-# print(" EVAL RESULTS FOR TFTMODEL:")
-# for site, actual, forecast in zip(site_names, test_series, forecasts):
-#     print(f"{site}: RMSE={rmse(actual, forecast):.3f}, MAE={mae(actual, forecast):.3f}, r2={r2_score(actual, forecast)}")
+print(f"EVAL RESULTS FOR {model_name}:")
+average_scores=[0,0,0]
+for site, actual, forecast in zip(site_names, test_series, forecasts):
+    forecast = target_scaler.inverse_transform(forecast)
+    actual  = target_scaler.inverse_transform(test)
+    average_scores[0] += rmse(actual, forecast)
+    average_scores[1] += mae(actual, forecast)
+    average_scores[2] += r2_score(actual, forecast)
+    print(f"{site}: RMSE={rmse(actual, forecast):.3f}, MAE={mae(actual, forecast):.3f}, r2={r2_score(actual, forecast)}")
+average_scores = [ i / len(site_names) for i in average_scores]
+model_average_scores.update({model_name:average_scores})
+print(average_scores)
 
 # scores = []
 # for site_name, s in zip(site_names, series_scaled_list):
@@ -393,7 +402,7 @@ for s, p, f in zip(series_scaled_list, past_covar_scaled_list, future_covar_scal
 
 
 # Probabilistic RNN
-# model_name = "RNNModel"
+model_name = "RNNModel"
 # model = RNNModel(
 #     input_chunk_length = 24,
 #     model="LSTM",
@@ -423,26 +432,36 @@ for s, p, f in zip(series_scaled_list, past_covar_scaled_list, future_covar_scal
 
 # model.save(model_name)
 # model = RNNModel.load(model_name)
-# # model = RNNModel.load_from_checkpoint(model_name, best = False)
+model = RNNModel.load_from_checkpoint(model_name, best = False, work_dir = os.path.join(os.path.dirname(DB_FILEPATH), model_name))
 
-# forecasts = []
-# for train, test, p_test, f_test in zip(train_series, test_series, test_past_covar, test_future_covar):
-#     forecast = model.predict(series=train, n=len(test), future_covariates=f_test, verbose = True)
-#     forecasts.append(forecast)
+forecasts = []
+for train, test, p_test, f_test in zip(train_series, test_series, test_past_covar, test_future_covar):
+    forecast = model.predict(series=train, n=len(test), future_covariates=f_test, verbose = True)
+    forecasts.append(forecast)
     
 
-# print(" EVAL RESULTS FOR RNNMODEL:")
-# for site, actual, forecast in zip(site_names, test_series, forecasts):
-#     forecast = target_scaler.inverse_transform(forecast)
-#     actual  = target_scaler.inverse_transform(test)
-#     print(f"{site}: RMSE={rmse(actual, forecast):.3f}, MAE={mae(actual, forecast):.3f}, r2={r2_score(actual, forecast)}")
-#         # Plot both
-#     plt.figure(figsize=(10, 6))
-#     actual.plot(label="Actual", lw=2)
-#     forecast.plot(label="Forecast", lw=2, color='orange')
-#     plt.title("Actual vs Predicted (RNNModel Forecast)")
-#     plt.legend()
-#     plt.show()
+print(f"EVAL RESULTS FOR {model_name}:")
+average_scores=[0,0,0]
+for site, actual, forecast in zip(site_names, test_series, forecasts):
+    forecast = target_scaler.inverse_transform(forecast)
+    actual  = target_scaler.inverse_transform(test)
+    average_scores[0] += rmse(actual, forecast)
+    average_scores[1] += mae(actual, forecast)
+    average_scores[2] += r2_score(actual, forecast)
+    print(f"{site}: RMSE={rmse(actual, forecast):.3f}, MAE={mae(actual, forecast):.3f}, r2={r2_score(actual, forecast)}")
+
+    # plt.figure(figsize=(10, 6))
+    # actual.plot(label="Actual", lw=2)
+    # forecast.plot(label="Forecast", lw=2, color='orange')
+    # plt.title("Actual vs Predicted (RNNModel Forecast)")
+    # plt.legend()
+    # plt.show()
+
+average_scores = [ i / len(site_names) for i in average_scores]
+model_average_scores.update({model_name:average_scores})
+print(average_scores)
+
+   
 
 # scores = []
 # for site_name, s,p,f in zip(site_names, series_scaled_list,past_covar_scaled_list, future_covar_scaled_list):
@@ -467,7 +486,7 @@ for s, p, f in zip(series_scaled_list, past_covar_scaled_list, future_covar_scal
 
 
 # TS Mixer
-# model_name="TSMixerModel"
+model_name="TSMixerModel"
 # model = TSMixerModel(
 #     input_chunk_length = 48,
 #     output_chunk_length = 12,
@@ -495,15 +514,15 @@ for s, p, f in zip(series_scaled_list, past_covar_scaled_list, future_covar_scal
 
 # model.save(model_name)
 # # model = TSMixerModel.load(model_name)
-# # model = TSMixerModel.load_from_checkpoint(model_name, best = False)
+model = TSMixerModel.load_from_checkpoint(model_name, best = False, work_dir = os.path.join(os.path.dirname(DB_FILEPATH), model_name))
 
-# forecasts = []
-# for train, test, p_test, f_test in zip(train_series, test_series, test_past_covar, test_future_covar):
-#     forecast = model.predict(series=train, n=len(test), past_covariates=p_test, future_covariates=f_test, verbose = True)
-#     forecasts.append(forecast)
-#     # Invert scaling if needed
-#     actual = target_scaler.inverse_transform(test)
-#     forecast = target_scaler.inverse_transform(forecast)
+forecasts = []
+for train, test, p_test, f_test in zip(train_series, test_series, test_past_covar, test_future_covar):
+    forecast = model.predict(series=train, n=len(test), past_covariates=p_test, future_covariates=f_test, verbose = True)
+    forecasts.append(forecast)
+    # Invert scaling if needed
+    actual = target_scaler.inverse_transform(test)
+    forecast = target_scaler.inverse_transform(forecast)
 
 #     # Plot both
 #     plt.figure(figsize=(10, 6))
@@ -513,10 +532,18 @@ for s, p, f in zip(series_scaled_list, past_covar_scaled_list, future_covar_scal
 #     plt.legend()
 #     plt.show()
 
-# print(f"EVAL RESULTS FOR {model_name}:")
-# for site, actual, forecast in zip(site_names, test_series, forecasts):
-#     print(actual)
-#     print(f"{site}: RMSE={rmse(actual, forecast):.3f}, MAE={mae(actual, forecast):.3f}, r2={r2_score(actual, forecast)}")
+print(f"EVAL RESULTS FOR {model_name}:")
+average_scores=[0,0,0]
+for site, actual, forecast in zip(site_names, test_series, forecasts):
+    forecast = target_scaler.inverse_transform(forecast)
+    actual  = target_scaler.inverse_transform(test)
+    average_scores[0] += rmse(actual, forecast)
+    average_scores[1] += mae(actual, forecast)
+    average_scores[2] += r2_score(actual, forecast)
+    print(f"{site}: RMSE={rmse(actual, forecast):.3f}, MAE={mae(actual, forecast):.3f}, r2={r2_score(actual, forecast)}")
+average_scores = [ i / len(site_names) for i in average_scores]
+model_average_scores.update({model_name:average_scores})
+print(average_scores)
 
 # scores = []
 # for site_name, s, p, f in zip(site_names, series_scaled_list, past_covar_scaled_list, future_covar_scaled_list):
